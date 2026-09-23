@@ -1,0 +1,61 @@
+name: muevex_conductor
+description: Plataforma de transporte de muebles y cargas pequeñas - App del conductor
+publish_to: 'none'
+version: 1.0.0+1001
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management - Riverpod 2.x (igual que MUEVEX cliente)
+  riverpod: ^2.5.1
+  flutter_riverpod: ^2.5.1
+
+  # Navigation
+  go_router: ^7.0.0
+
+  # API & Backend (mismo proyecto Supabase de MUEVEX)
+  supabase_flutter: ^2.17.2
+
+  # Imágenes
+  image_picker: ^1.0.0
+  cached_network_image: ^4.0.0
+
+  # Local storage
+  shared_preferences: ^2.0.0
+  flutter_secure_storage: ^11.0.0
+
+  # Utilidades
+  intl: ^0.20.3
+  uuid: ^4.0.0
+  equatable: ^2.1.0
+
+  # Mapas, búsqueda y rutas (sin API keys)
+  flutter_map: ^6.2.1
+  latlong2: ^0.9.1
+  geolocator: ^14.0.3
+  http: ^1.2.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/muevex_logo.png
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
