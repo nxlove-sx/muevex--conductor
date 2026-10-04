@@ -12,6 +12,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications y flutter_secure_storage exigen
+        // "core library desugaring" para usar APIs de java.time en Android
+        // antiguo. Sin esto Gradle aborta el build.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -45,4 +49,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Requerido por flutter_local_notifications / flutter_secure_storage.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

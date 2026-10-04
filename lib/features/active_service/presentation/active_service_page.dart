@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:muevex_conductor/core/constants/app_constants.dart';
 import 'package:muevex_conductor/core/theme/muevex_theme.dart';
 import 'package:muevex_conductor/core/utils/money.dart';
+import 'package:muevex_conductor/core/widgets/complete_service_sheet.dart';
 import 'package:muevex_conductor/core/widgets/custom_button.dart';
 import 'package:muevex_conductor/core/widgets/muevex_snackbar.dart';
 import 'package:muevex_conductor/core/widgets/state_views.dart';
@@ -60,8 +61,13 @@ class _ServiceBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final amount = (service.estimatedPrice > 0 ? service.estimatedPrice : service.priceBase) > 0
-        ? service.estimatedPrice > 0 ? service.estimatedPrice : service.priceBase
+    final amount = (service.estimatedPrice > 0
+                ? service.estimatedPrice
+                : service.priceBase) >
+            0
+        ? service.estimatedPrice > 0
+            ? service.estimatedPrice
+            : service.priceBase
         : service.priceTotal;
     final originName = service.originName?.isNotEmpty == true
         ? service.originName!
@@ -75,7 +81,8 @@ class _ServiceBody extends ConsumerWidget {
       children: [
         _PriceCard(service: service, amount: amount),
         const SizedBox(height: 16),
-        _RouteCard(service: service, originName: originName, destName: destName),
+        _RouteCard(
+            service: service, originName: originName, destName: destName),
         const SizedBox(height: 16),
         _CargoCard(service: service),
         const SizedBox(height: 16),
@@ -86,7 +93,8 @@ class _ServiceBody extends ConsumerWidget {
         if (service.status.isActive)
           TextButton(
             onPressed: () => _confirmCancel(context, ref),
-            style: TextButton.styleFrom(foregroundColor: MuevexTheme.errorColor),
+            style:
+                TextButton.styleFrom(foregroundColor: MuevexTheme.errorColor),
             child: const Text('Cancelar servicio'),
           ),
       ],
@@ -145,15 +153,15 @@ class _ActionArea extends ConsumerWidget {
               backgroundColor: Colors.white,
               textColor: MuevexTheme.primaryColor,
               borderColor: MuevexTheme.primaryColor,
-              onPressed: () => context.push('/navigation/${service.id}?phase=1'),
+              onPressed: () =>
+                  context.push('/navigation/${service.id}?phase=1'),
             ),
             const SizedBox(height: 12),
             CustomButton(
               text: 'LLEGUÉ',
               gradient: true,
               onPressed: () async {
-                final ok =
-                    await notifier.advance(ServiceStatus.enRecogida);
+                final ok = await notifier.advance(ServiceStatus.enRecogida);
                 if (!context.mounted) return;
                 if (ok) {
                   context.pushReplacement('/service/${service.id}');
@@ -198,39 +206,57 @@ class _ActionArea extends ConsumerWidget {
               backgroundColor: Colors.white,
               textColor: MuevexTheme.primaryColor,
               borderColor: MuevexTheme.primaryColor,
-              onPressed: () => context.push('/navigation/${service.id}?phase=2'),
+              onPressed: () =>
+                  context.push('/navigation/${service.id}?phase=2'),
             ),
             const SizedBox(height: 12),
             CustomButton(
               text: 'FINALIZAR',
               gradient: true,
               onPressed: () async {
-                final ok =
-                    await notifier.advance(ServiceStatus.completado);
+                final ok = await notifier.advance(ServiceStatus.completado);
                 if (!context.mounted) return;
-                if (ok) {
-                  MuevexSnackBar.success(context, 'Servicio completado');
-                  context.go('/home');
-                } else {
+                if (!ok) {
                   MuevexSnackBar.error(
                     context,
                     'No se pudo completar. Revisa tu conexión e inténtalo de nuevo.',
                   );
+                  return;
                 }
+                await showServiceCompletedSheet(
+                  context,
+                  serviceId: service.id,
+                  serviceDescription: service.description,
+                );
+                if (context.mounted) context.go('/home');
               },
             ),
           ],
         ),
       ServiceStatus.completado => Column(
           children: [
-            const Icon(Icons.celebration, size: 48, color: MuevexTheme.accentColor),
+            const Icon(Icons.celebration,
+                size: 48, color: MuevexTheme.accentColor),
             const SizedBox(height: 8),
             const Text('Servicio completado',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             CustomButton(
-              text: 'Completar y cobrar',
+              text: 'Generar minifactura',
+              icon: Icons.receipt_long_outlined,
               gradient: true,
+              onPressed: () => showServiceCompletedSheet(
+                context,
+                serviceId: service.id,
+                serviceDescription: service.description,
+              ),
+            ),
+            const SizedBox(height: 12),
+            CustomButton(
+              text: 'Volver al inicio',
+              backgroundColor: Colors.white,
+              textColor: MuevexTheme.primaryColor,
+              borderColor: MuevexTheme.primaryColor,
               onPressed: () => context.go('/home'),
             ),
           ],
@@ -253,14 +279,16 @@ class _PhaseBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: MuevexTheme.primaryColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: MuevexTheme.primaryColor.withValues(alpha: 0.3)),
+        border:
+            Border.all(color: MuevexTheme.primaryColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Icon(Icons.flag, color: MuevexTheme.primaryColor, size: 22),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child:
+                Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -288,9 +316,11 @@ class _PriceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  money(amount),
+                  moneyConIva(amount),
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold),
                 ),
                 Text(
                   '${service.distanceKm.toStringAsFixed(1)} km · ${service.durationMinutes} min',
@@ -347,15 +377,16 @@ class _CargoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <(IconData, String)>[
-      (Icons.category, 'Tipo: ${kLoadTypeNames[service.loadType] ?? service.loadType}'),
+      (
+        Icons.category,
+        'Tipo: ${kLoadTypeNames[service.loadType] ?? service.loadType}'
+      ),
       if ((service.loadDescription?.isNotEmpty ?? false))
         (Icons.description_outlined, service.loadDescription!),
       if (service.loadWeightKg > 0)
         (Icons.scale, 'Peso: ${service.loadWeightKg.toStringAsFixed(0)} kg'),
-      if (service.floors > 0)
-        (Icons.stairs, 'Pisos: ${service.floors}'),
-      if (service.loadingHelp)
-        (Icons.help_outline, 'Requiere ayuda de carga'),
+      if (service.floors > 0) (Icons.stairs, 'Pisos: ${service.floors}'),
+      if (service.loadingHelp) (Icons.help_outline, 'Requiere ayuda de carga'),
     ];
     return Card(
       child: Padding(
@@ -372,8 +403,7 @@ class _CargoCard extends StatelessWidget {
                       Icon(e.$1, size: 18, color: MuevexTheme.primaryColor),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(e.$2,
-                            style: const TextStyle(fontSize: 13)),
+                        child: Text(e.$2, style: const TextStyle(fontSize: 13)),
                       ),
                     ],
                   ),
@@ -389,7 +419,8 @@ class _RouteRow extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String text;
-  const _RouteRow({required this.icon, required this.color, required this.text});
+  const _RouteRow(
+      {required this.icon, required this.color, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +431,8 @@ class _RouteRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(text,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         ),
       ],
     );
@@ -482,9 +514,8 @@ class _HorizontalStepper extends StatelessWidget {
                         fontWeight: (i == currentIndex)
                             ? FontWeight.bold
                             : FontWeight.normal,
-                        color: (i <= currentIndex)
-                            ? Colors.black87
-                            : Colors.grey,
+                        color:
+                            (i <= currentIndex) ? Colors.black87 : Colors.grey,
                       ),
                     ),
                   ],

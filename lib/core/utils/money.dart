@@ -1,5 +1,7 @@
 /// Formato de moneda colombiana con separador de miles.
-/// Ej.: money(25500) => "\$25.500"; money(-1200) => "-\$1.200".
+/// Ej.: money(25500) => "\$25.500"; money(-1200) => "\$-1.200".
+///
+/// El signo negativo va **después** del símbolo, no antes.
 String money(double value) {
   final negative = value < 0;
   final s = value.abs().round().toString();
@@ -10,3 +12,25 @@ String money(double value) {
   }
   return '\$${negative ? '-' : ''}$buf';
 }
+
+/// Tarifa de IVA de Colombia.
+///
+/// La tabla de TRANSPERSQUI da precios NETOS y el motor de tarifas
+/// (`tariff_engine.dart`) no aplica IVA en ningún punto. Lo que se ve en la app
+/// es el subtotal; el IVA se suma al cobrar, tanto en la factura (función
+/// `crear_factura_desde_servicio` de Postgres) como aquí.
+///
+/// > [!IMPORTANT] Un solo valor
+/// > Este 19% está también en `public.emisor_config.iva_porcentaje` en
+/// > Supabase. Si cambia la tarifa hay que cambiar los dos.
+const double ivaRate = 0.19;
+
+/// Precio que paga el cliente: el subtotal del motor más el IVA.
+///
+/// Usar en los lugares donde se muestra el **precio del servicio**. No usar en
+/// las ganancias del conductor: `driverEarnings` es la parte del conductor y
+/// el IVA no le suma.
+double precioTotalConIva(double subtotal) => subtotal * (1 + ivaRate);
+
+/// Precio que paga el cliente, ya formateado.
+String moneyConIva(double subtotal) => money(precioTotalConIva(subtotal));

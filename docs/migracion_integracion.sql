@@ -159,6 +159,9 @@ DECLARE
   v_customer_id uuid;
   v_est         numeric;
   v_fee         numeric;
+  v_actual      text;
+  v_actual_driver uuid;
+  v_ok          boolean := false;
 BEGIN
   IF p_status NOT IN ('en_recogida','en_curso','completado', 'aceptado') THEN
     RAISE EXCEPTION 'Transición de estado no permitida.';
@@ -169,11 +172,15 @@ BEGIN
        SET status = 'en_recogida'
      WHERE id = p_service_id AND driver_id = auth.uid() AND status = 'aceptado'
      RETURNING customer_id INTO v_customer_id;
+    v_ok := FOUND;
+
   ELSIF p_status = 'en_curso' THEN
     UPDATE public.services
        SET status = 'en_curso', started_at = NOW()
      WHERE id = p_service_id AND driver_id = auth.uid() AND status = 'en_recogida'
      RETURNING customer_id INTO v_customer_id;
+    v_ok := FOUND;
+
   ELSE -- 'completado'
     UPDATE public.services
        SET status = 'completado',
@@ -182,17 +189,45 @@ BEGIN
            driver_earnings = COALESCE(estimated_price, price_base, 0)
                              - COALESCE(platform_fee, 0)
      WHERE id = p_service_id AND driver_id = auth.uid() AND status = 'en_curso'
-     RETURNING customer_id, driver_earnings, platform_fee INTO v_customer_id, v_est, v_fee;
+     RETURNING customer_id, driver_earnings, platform_fee
+       INTO v_customer_id, v_est, v_fee;
+    v_ok := FOUND;
 
-    IF FOUND THEN
+    IF v_ok THEN
+      -- El contador de servicios del conductor. Antes esto se apoyaba en que
+      -- hubiera fila en `driver_profiles` y, si no había, tumbaba el
+      -- completado entero. Ahora se crea la fila si falta y se actualiza con
+      -- `total_services + 1` sobre el valor real, para no duplicar si el
+      -- completado se repite.
       UPDATE public.driver_profiles
          SET total_services = total_services + 1
        WHERE user_id = auth.uid();
+
+      IF NOT FOUND THEN
+        INSERT INTO public.driver_profiles (id, user_id, total_services)
+             VALUES (auth.uid(), auth.uid(), 1)
+        ON CONFLICT (id) DO NOTHING;
+      END IF;
     END IF;
   END IF;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'No puedes cambiar el estado de este servicio.';
+  -- El fallo se decide con `v_ok`, no con FOUND: `FOUND` a estas alturas
+  -- describe el último update ejecutado (el de `driver_profiles`), no el que
+  -- importa.
+  IF NOT v_ok THEN
+    -- Mensaje que dice la verdad: primero de quién es el servicio y luego en
+    -- qué estado está. Antes era el mismo texto para los dos casos.
+    SELECT status, driver_id INTO v_actual, v_actual_driver
+      FROM public.services
+     WHERE id = p_service_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Ese servicio no existe.';
+    ELSIF v_actual_driver IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'Ese servicio no es tuyo.';
+    ELSE
+      RAISE EXCEPTION 'No se puede pasar de "%" a "%".', v_actual, p_status;
+    END IF;
   END IF;
 
   PERFORM public.notify_user(
@@ -217,6 +252,7 @@ BEGIN
 
   RETURN QUERY SELECT * FROM public.services WHERE id = p_service_id;
 END $$;
+
 
 -- ---------------------------------------------------------------------------
 -- 5) RPC CANCEL_SERVICE (spec 61)

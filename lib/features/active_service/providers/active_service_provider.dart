@@ -8,6 +8,7 @@ import 'package:muevex_conductor/features/auth/providers/auth_provider.dart';
 import 'package:muevex_conductor/features/dashboard/providers/driver_provider.dart';
 import 'package:muevex_conductor/features/dashboard/providers/requests_provider.dart';
 import 'package:muevex_conductor/features/misc/providers/earnings_history_providers.dart';
+import 'package:muevex_conductor/core/services/notification_service.dart';
 
 class ActiveServiceNotifier extends AsyncNotifier<Service?> {
   RealtimeChannel? _channel;
@@ -56,10 +57,19 @@ class ActiveServiceNotifier extends AsyncNotifier<Service?> {
       state = AsyncValue.data(updated);
       if (next == ServiceStatus.completado) {
         await ref.read(driverProfileProvider.notifier).setAvailable();
+        // Al completar el servicio, dejamos de reportar ubicación activa
+        // y mostramos "Servicio completado" en lugar de la ubicación
         sharedLocationReporter.updateService(null);
         ref.invalidate(earningsProvider);
         ref.invalidate(historyProvider);
         ref.invalidate(ratingsProvider);
+        // Notificación de servicio completado - Ya no se envía "mi ubicación"
+        // Se envía notificación de finalización en su lugar
+        notificationService.showOrderEventNotification(
+          type: 'service_completed',
+          userRole: 'driver',
+          data: {'serviceId': current.id},
+        );
       }
       return true;
     } catch (_) {
@@ -71,7 +81,8 @@ class ActiveServiceNotifier extends AsyncNotifier<Service?> {
     final current = state.valueOrNull;
     if (current == null) return false;
     try {
-      final updated = await ref.read(serviceRepositoryProvider).cancel(current.id);
+      final updated =
+          await ref.read(serviceRepositoryProvider).cancel(current.id);
       state = AsyncValue.data(updated);
       await ref.read(driverProfileProvider.notifier).setAvailable();
       sharedLocationReporter.updateService(null);
@@ -87,6 +98,7 @@ class ActiveServiceNotifier extends AsyncNotifier<Service?> {
   }
 }
 
-final activeServiceProvider = AsyncNotifierProvider<ActiveServiceNotifier, Service?>(
+final activeServiceProvider =
+    AsyncNotifierProvider<ActiveServiceNotifier, Service?>(
   ActiveServiceNotifier.new,
 );

@@ -45,7 +45,8 @@ class HomeTab extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           if (profile != null)
-            _ProfileHeader(userName: user?.name ?? 'Conductor', profile: profile),
+            _ProfileHeader(
+                userName: user?.name ?? 'Conductor', profile: profile),
           const SizedBox(height: 14),
           const StatusButton(),
           if (earnings != null) ...[
@@ -61,12 +62,14 @@ class HomeTab extends ConsumerWidget {
             children: [
               Text(
                 online ? 'Servicios disponibles' : 'Búsqueda de servicios',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const Spacer(),
               if (online)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: MuevexTheme.successColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
@@ -74,9 +77,12 @@ class HomeTab extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.circle, size: 8, color: MuevexTheme.successColor),
+                      Icon(Icons.circle,
+                          size: 8, color: MuevexTheme.successColor),
                       const SizedBox(width: 4),
-                      const Text('En vivo', style: TextStyle(fontSize: 12, color: MuevexTheme.successColor)),
+                      const Text('En vivo',
+                          style: TextStyle(
+                              fontSize: 12, color: MuevexTheme.successColor)),
                     ],
                   ),
                 ),
@@ -130,7 +136,14 @@ class HomeTab extends ConsumerWidget {
       ];
     }
     return requests
-        .map<Widget>((s) => ServiceCard(service: s))
+        .map<Widget>(
+          // `key` por servicio: `ServiceCard` es Stateful y su State guarda
+          // `_busy`. Sin key, al reordenarse la lista (cada INSERT/UPDATE de
+          // `services` llega por Realtime) el State se emparejaba por
+          // posición y el botón "Aceptar" se quedaba en "Aceptando…" para
+          // siempre en el servicio que ocupaba ese hueco.
+          (s) => ServiceCard(key: ValueKey(s.id), service: s),
+        )
         .toList();
   }
 }
@@ -288,7 +301,8 @@ class _ActiveServiceCardState extends ConsumerState<_ActiveServiceCard> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('¿Cancelar servicio?'),
-        content: const Text('El cliente será notificado y el servicio quedará cancelado.'),
+        content: const Text(
+            'El cliente será notificado y el servicio quedará cancelado.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -321,9 +335,8 @@ class _ActiveServiceCardState extends ConsumerState<_ActiveServiceCard> {
   @override
   Widget build(BuildContext context) {
     final service = widget.service;
-    final originName = service.originName?.isNotEmpty == true
-        ? service.originName!
-        : 'Origen';
+    final originName =
+        service.originName?.isNotEmpty == true ? service.originName! : 'Origen';
     final destName = service.destinationName?.isNotEmpty == true
         ? service.destinationName!
         : 'Destino';
@@ -359,7 +372,7 @@ class _ActiveServiceCardState extends ConsumerState<_ActiveServiceCard> {
                 ),
               ),
               Text(
-                money(service.estimatedPrice > 0
+                moneyConIva(service.estimatedPrice > 0
                     ? service.estimatedPrice
                     : service.priceBase),
                 style: const TextStyle(
@@ -458,7 +471,8 @@ class _ActiveRouteLine extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String text;
-  const _ActiveRouteLine({required this.icon, required this.color, required this.text});
+  const _ActiveRouteLine(
+      {required this.icon, required this.color, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -547,101 +561,103 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ),
           Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Stack(
+              Row(
                 children: [
-                  CircleAvatar(
-                    radius: 26,
-                    backgroundColor: Colors.white.withValues(alpha: 0.2),
-                    child: profile.photoUrl != null && profile.photoUrl!.isNotEmpty
-                        ? ClipOval(
-                            child: Image.network(
-                              profile.photoUrl!,
-                              width: 52,
-                              height: 52,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.person, color: Colors.white, size: 30),
-                  ),
-                  if (verified)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified,
-                          size: 15,
-                          color: MuevexTheme.primaryColor,
-                        ),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 26,
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                        child: profile.photoUrl != null &&
+                                profile.photoUrl!.isNotEmpty
+                            ? ClipOval(
+                                child: Image.network(
+                                  profile.photoUrl!,
+                                  width: 52,
+                                  height: 52,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.person,
+                                color: Colors.white, size: 30),
                       ),
+                      if (verified)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.verified,
+                              size: 15,
+                              color: MuevexTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _greeting(),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _greeting(),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.75),
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      userName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _HeroStat(
+                    icon: Icons.star_rounded,
+                    label: 'Calificación',
+                    value: profile.rating.toStringAsFixed(1),
+                  ),
+                  const _HeroDivider(),
+                  _HeroStat(
+                    icon: Icons.task_alt_rounded,
+                    label: 'Servicios',
+                    value: '${profile.totalServices}',
+                  ),
+                  const _HeroDivider(),
+                  _HeroStat(
+                    icon: Icons.verified_user_rounded,
+                    label: 'Estado',
+                    value: verified ? 'Verificado' : 'Pendiente',
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _HeroStat(
-                icon: Icons.star_rounded,
-                label: 'Calificación',
-                value: profile.rating.toStringAsFixed(1),
-              ),
-              const _HeroDivider(),
-              _HeroStat(
-                icon: Icons.task_alt_rounded,
-                label: 'Servicios',
-                value: '${profile.totalServices}',
-              ),
-              const _HeroDivider(),
-              _HeroStat(
-                icon: Icons.verified_user_rounded,
-                label: 'Estado',
-                value: verified ? 'Verificado' : 'Pendiente',
-              ),
-            ],
-          ),
-        ],
-        ),
         ],
       ),
     );

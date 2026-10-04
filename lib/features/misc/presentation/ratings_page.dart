@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:muevex_conductor/core/theme/muevex_theme.dart';
+import 'package:muevex_conductor/core/widgets/animations.dart';
 import 'package:muevex_conductor/core/widgets/state_views.dart';
 import 'package:muevex_conductor/data/models/rating_model.dart';
 import 'package:muevex_conductor/features/dashboard/providers/driver_provider.dart';
@@ -27,7 +28,8 @@ class RatingsPage extends ConsumerWidget {
         data: (ratings) {
           final avg = ratings.isEmpty
               ? (profile?.rating ?? 0.0)
-              : ratings.map((r) => r.score).reduce((a, b) => a + b) / ratings.length;
+              : ratings.map((r) => r.score).reduce((a, b) => a + b) /
+                  ratings.length;
 
           if (ratings.isEmpty) {
             return MuevexEmptyState(
@@ -44,12 +46,27 @@ class RatingsPage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _AverageCard(average: avg, count: ratings.length),
+              StaggeredEntrance(
+                index: 0,
+                child: _AverageCard(average: avg, count: ratings.length),
+              ),
               const SizedBox(height: 20),
-              const Text('Reseñas recibidas',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              StaggeredEntrance(
+                index: 1,
+                child: const Text(
+                  'Reseñas recibidas',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
               const SizedBox(height: 10),
-              ...ratings.map((r) => _RatingTile(rating: r)),
+              // Escalonado: la media y el encabezado entran primero y las
+              // reseñas van apareciendo detrás, en vez de caer de golpe.
+              ...ratings.indexed.map(
+                (entry) => StaggeredEntrance(
+                  index: entry.$1 + 2,
+                  child: _RatingTile(rating: entry.$2),
+                ),
+              ),
             ],
           );
         },
@@ -92,7 +109,8 @@ class _AverageCard extends StatelessWidget {
                 }),
               ),
               const SizedBox(height: 4),
-              Text('$count reseñas', style: TextStyle(color: Colors.grey.shade600)),
+              Text('$count reseñas',
+                  style: TextStyle(color: Colors.grey.shade600)),
             ],
           ),
         ],

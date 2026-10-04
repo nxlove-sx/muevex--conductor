@@ -11,6 +11,7 @@ import 'package:muevex_conductor/core/services/live_location_reporter.dart';
 import 'package:muevex_conductor/core/services/location_service.dart';
 import 'package:muevex_conductor/core/theme/muevex_theme.dart';
 import 'package:muevex_conductor/core/utils/money.dart';
+import 'package:muevex_conductor/core/widgets/complete_service_sheet.dart';
 import 'package:muevex_conductor/core/widgets/custom_button.dart';
 import 'package:muevex_conductor/core/widgets/muevex_snackbar.dart';
 import 'package:muevex_conductor/core/widgets/state_views.dart';
@@ -77,7 +78,18 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
     _loaded = service;
     sharedLocationReporter.attach(userId, service.id);
     await sharedLocationReporter.setEnabled(true);
+
+    // Cada `await` puede dejar el widget destruido (el conductor cierra la
+    // pantalla mientras se resuelve la ruta, que es lo normal con datos
+    // móviles). Sin esta comprobación, `_loadInitialRoute` haría setState
+    // sobre un State liberado y, peor, `_listenPosition` abriría un stream de
+    // GPS que `dispose` ya no puede cerrar: el GPS se quedaba encendido
+    // reportando posición indefinidamente, vaciando la batería.
+    if (!mounted) return;
+
     await _loadInitialRoute(service);
+    if (!mounted) return;
+
     _listenPosition();
   }
 
@@ -94,13 +106,16 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
   }
 
   Future<void> _loadInitialRoute(Service service) async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final pos = await LocationService.getCurrentPosition();
       final target = _target;
       if (pos == null || target == null) return;
+      if (!mounted) return;
       await _fetchRoute(LatLng(pos.latitude, pos.longitude), target);
     } catch (e) {
+      if (!mounted) return;
       _onRouteError(e);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -142,8 +157,7 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
 
     final current = LatLng(pos.latitude, pos.longitude);
     final shouldRefresh = _lastRouteOrigin == null ||
-        const Distance()
-                .distance(_lastRouteOrigin!, current) >=
+        const Distance().distance(_lastRouteOrigin!, current) >=
             _routeRecalcMeters ||
         DateTime.now().difference(_lastRouteAt) >= _routeRecalcInterval;
     if (shouldRefresh && !_loading) {
@@ -185,21 +199,27 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
         .advance(ServiceStatus.completado);
     _updating = false;
     if (!context.mounted) return;
-    if (ok) {
-      MuevexSnackBar.success(context, 'Servicio completado');
-      context.go('/home');
-    } else {
+    if (!ok) {
       MuevexSnackBar.error(
         context,
         'No se pudo completar. Revisa tu conexión e inténtalo de nuevo.',
       );
+      return;
     }
+    final service = ref.read(activeServiceProvider).valueOrNull;
+    await showServiceCompletedSheet(
+      context,
+      serviceId: widget.id,
+      serviceDescription: service?.description,
+    );
+    if (context.mounted) context.go('/home');
   }
 
   @override
   void dispose() {
     _positionSub?.cancel();
     _positionSub = null;
+    sharedLocationReporter.shutdown();
     _routeService.dispose();
     _mapController.dispose();
     super.dispose();
@@ -218,7 +238,8 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
           ? MuevexEmptyState(
               icon: Icons.route_outlined,
               title: 'Sin servicio activo',
-              subtitle: 'El servicio ya no está disponible en esta ruta de navegación.',
+              subtitle:
+                  'El servicio ya no está disponible en esta ruta de navegación.',
               actionLabel: 'Volver al inicio',
               actionIcon: Icons.home_outlined,
               onAction: () => context.go('/home'),
@@ -232,9 +253,8 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
     final destination = LatLng(service.destinationLat, service.destinationLng);
     final target = isPhase2 ? destination : origin;
 
-    final polylines = _route != null
-        ? [...buildRoutePolylines(_route!)]
-        : const <Polyline>[];
+    final polylines =
+        _route != null ? [...buildRoutePolylines(_route!)] : const <Polyline>[];
 
     final targetLabel = isPhase2
         ? (service.destinationName?.isNotEmpty == true
@@ -303,8 +323,8 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
                       border: Border.all(color: Colors.white, width: 2.5),
                       boxShadow: [
                         BoxShadow(
-                          color: MuevexTheme.accentColor
-                              .withValues(alpha: 0.45),
+                          color:
+                              MuevexTheme.accentColor.withValues(alpha: 0.45),
                           blurRadius: 10,
                           spreadRadius: 1,
                         ),
@@ -327,7 +347,8 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
               borderRadius: BorderRadius.circular(20),
               color: Colors.black.withValues(alpha: 0.55),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 child: _loading
                     ? const Row(
                         mainAxisSize: MainAxisSize.min,
@@ -339,14 +360,16 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
                           ),
                           SizedBox(width: 8),
                           Text('Calculando ruta…',
-                              style: TextStyle(fontSize: 12, color: Colors.white)),
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.white)),
                         ],
                       )
                     : Text(
                         _route != null
                             ? '${remainingKm.toStringAsFixed(1)} km · ~$remainingMin min'
                             : 'Sin ruta a la vista',
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.white),
                       ),
               ),
             ),
@@ -359,7 +382,8 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
             heroTag: 'recenter-btn',
             backgroundColor: MuevexTheme.primaryColor,
             foregroundColor: Colors.white,
-            tooltip: _following ? 'Siguiendo tu posición' : 'Centrar en mi posición',
+            tooltip:
+                _following ? 'Siguiendo tu posición' : 'Centrar en mi posición',
             onPressed: _recenter,
             child: Icon(_following ? Icons.my_location : Icons.navigation),
           ),
@@ -378,13 +402,14 @@ class _NavigationPageState extends ConsumerState<NavigationPage> {
                         isPhase2 ? Icons.location_on : Icons.my_location,
                         color: MuevexTheme.primaryColor,
                       ),
-                      title: Text(targetLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      title: Text(targetLabel,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
                         _route != null
                             ? '${remainingKm.toStringAsFixed(1)} km · ~$remainingMin min restantes'
                             : '${service.distanceKm.toStringAsFixed(1)} km aprox.',
                       ),
-                      trailing: Text(money(service.estimatedPrice),
+                      trailing: Text(moneyConIva(service.estimatedPrice),
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),

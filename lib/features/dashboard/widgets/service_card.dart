@@ -8,6 +8,11 @@ import 'package:muevex_conductor/core/widgets/muevex_snackbar.dart';
 import 'package:muevex_conductor/data/models/service_model.dart';
 import 'package:muevex_conductor/features/dashboard/providers/requests_provider.dart';
 
+/// Tarjeta de una solicitud en la cola del conductor.
+///
+/// El orden de lo que se pinte importa: un conductor elige con los ojos, así que
+/// primero va lo que decide (cuánto cobra y cuánto tarda), después el recorrido
+/// y al final los metadatos que solo sirven para decidir si el vehículo vale.
 class ServiceCard extends ConsumerStatefulWidget {
   final Service service;
   const ServiceCard({super.key, required this.service});
@@ -52,27 +57,29 @@ class _ServiceCardState extends ConsumerState<ServiceCard> {
 
   @override
   Widget build(BuildContext context) {
-    final price = service.estimatedPrice > 0
-        ? service.estimatedPrice
-        : service.priceBase;
-    final originName = service.originName?.isNotEmpty == true
+    final precio =
+        service.estimatedPrice > 0 ? service.estimatedPrice : service.priceBase;
+    final origen = service.originName?.isNotEmpty == true
         ? service.originName!
         : _fallbackCoords(service.originLat, service.originLng);
-    final destName = service.destinationName?.isNotEmpty == true
+    final destino = service.destinationName?.isNotEmpty == true
         ? service.destinationName!
         : _fallbackCoords(service.destinationLat, service.destinationLng);
+    // El ingreso del conductor solo existe cuando la tarifa ya lo calculó. Si no
+    // está, se enseña el precio del cliente y no se inventa una cifra.
+    final ganancia = service.driverEarnings > 0 ? service.driverEarnings : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -80,161 +87,255 @@ class _ServiceCardState extends ConsumerState<ServiceCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: Row(
+          _buildHeader(context, precio, ganancia),
+          _buildRoute(context, origen, destino),
+          if (_hayMetadatos) _buildMeta(context),
+          _buildActions(context),
+        ],
+      ),
+    );
+  }
+
+  bool get _hayMetadatos =>
+      service.loadWeightKg > 0 ||
+      service.floors > 0 ||
+      service.loadingHelp ||
+      service.needsHelp;
+
+  /// Tipo de carga, tipo de trabajo y lo que se cobra. La cifra va a la
+  /// derecha y en grande porque es la respuesta a "¿me conviene?".
+  Widget _buildHeader(BuildContext context, double precio, double ganancia) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: MuevexTheme.primaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.local_shipping_rounded,
+              color: MuevexTheme.primaryColor,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: MuevexTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.local_shipping_rounded,
-                    color: MuevexTheme.primaryColor,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _loadTypeLabel(service.loadType),
-                        style: const TextStyle(
-                          color: Color(0xFF111827),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Solicitud de traslado',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 Text(
-                  money(price),
+                  _loadTypeLabel(service.loadType),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: MuevexTheme.primaryColor,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    color: MuevexTheme.textPrimaryColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  service.loadDescription?.isNotEmpty == true
+                      ? service.loadDescription!
+                      : 'Solicitud de traslado',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
                   ),
                 ),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(14),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                ganancia > 0 ? moneyConIva(ganancia) : moneyConIva(precio),
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  height: 1.1,
+                  color: ganancia > 0
+                      ? MuevexTheme.successColor
+                      : MuevexTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                ganancia > 0 ? 'tu ganancia' : 'precio del cliente',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Origen → destino con la línea que los une. Una columna de puntos sueltos se
+  /// lee como dos direcciones sin relación; conectadas, se lee como un viaje.
+  Widget _buildRoute(BuildContext context, String origen, String destino) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      decoration: BoxDecoration(
+        color: MuevexTheme.primaryColor.withValues(alpha: 0.03),
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade100),
+          bottom: BorderSide(color: Colors.grey.shade100),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              _RouteNode(MuevexTheme.primaryColor, filled: true),
+              Container(
+                width: 2,
+                height: 28,
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+              _RouteNode(MuevexTheme.secondaryColor, filled: false),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _RoutePill(
-                  icon: Icons.my_location_rounded,
-                  color: MuevexTheme.primaryColor,
-                  text: originName,
-                ),
-                const SizedBox(height: 8),
-                _RoutePill(
-                  icon: Icons.location_on_rounded,
-                  color: MuevexTheme.secondaryColor,
-                  text: destName,
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _MetaChip(
-                      icon: Icons.straighten,
-                      label: '${service.distanceKm.toStringAsFixed(1)} km',
-                    ),
-                    _MetaChip(
-                      icon: Icons.schedule,
-                      label: '${_durationMinutes(service)} min',
-                    ),
-                    if (service.loadWeightKg > 0)
-                      _MetaChip(
-                        icon: Icons.scale,
-                        label: '${service.loadWeightKg.toStringAsFixed(0)} kg',
-                      ),
-                    if (service.loadingHelp || service.needsHelp)
-                      const _MetaChip(
-                        icon: Icons.help_outline,
-                        label: 'Necesita ayuda',
-                        highlight: true,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _busy ? null : _reject,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: MuevexTheme.errorColor,
-                          side: BorderSide(
-                            color: MuevexTheme.errorColor.withValues(alpha: 0.5),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          minimumSize: const Size.fromHeight(48),
-                        ),
-                        child: const Text('Rechazar'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: MuevexTheme.primaryGradient,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton.icon(
-                          onPressed: _busy ? null : _accept,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            minimumSize: const Size.fromHeight(48),
-                          ),
-                          icon: _busy
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.check_circle_outline,
-                                  size: 20),
-                          label: const Text(
-                            'Aceptar',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                _RouteLine('ORIGEN', origen),
+                const SizedBox(height: 14),
+                _RouteLine('DESTINO', destino),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeta(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _MetaChip(
+            icon: Icons.straighten,
+            label: '${service.distanceKm.toStringAsFixed(1)} km',
+          ),
+          _MetaChip(
+            icon: Icons.schedule,
+            label: '${_durationMinutes(service)} min',
+          ),
+          if (service.loadWeightKg > 0)
+            _MetaChip(
+              icon: Icons.scale,
+              label: '${service.loadWeightKg.toStringAsFixed(0)} kg',
+            ),
+          if (service.floors > 0)
+            _MetaChip(
+              icon: Icons.stairs,
+              label: service.floors == 1 ? '1 piso' : '${service.floors} pisos',
+            ),
+          if (service.loadingHelp || service.needsHelp)
+            const _MetaChip(
+              icon: Icons.help_outline,
+              label: 'Necesita ayuda',
+              highlight: true,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Aceptar es la acción principal y por eso va sólida; descartar es
+  /// deliberadamente discreta, no un segundo botón en el mismo plano.
+  Widget _buildActions(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _busy ? null : _reject,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: MuevexTheme.errorColor,
+                backgroundColor: MuevexTheme.errorColor.withValues(alpha: 0.05),
+                side: BorderSide(
+                  color: MuevexTheme.errorColor.withValues(alpha: 0.4),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                minimumSize: const Size.fromHeight(48),
+                textStyle: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('Descartar'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: MuevexTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ElevatedButton.icon(
+                onPressed: _busy ? null : _accept,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: _busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_circle_outline, size: 20),
+                label: const Text(
+                  'Aceptar servicio',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -262,36 +363,54 @@ class _ServiceCardState extends ConsumerState<ServiceCard> {
       '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
 }
 
-class _RoutePill extends StatelessWidget {
-  final IconData icon;
+class _RouteNode extends StatelessWidget {
+  const _RouteNode(this.color, {required this.filled});
   final Color color;
-  final String text;
-  const _RoutePill({
-    required this.icon,
-    required this.color,
-    required this.text,
-  });
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: filled ? color : Colors.white,
+        border: Border.all(color: color, width: 2.5),
+      ),
+    );
+  }
+}
+
+class _RouteLine extends StatelessWidget {
+  const _RouteLine(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: Colors.grey,
           ),
-          child: Icon(icon, size: 16, color: color),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 13.5,
+            height: 1.3,
+            color: MuevexTheme.textPrimaryColor,
           ),
         ),
       ],

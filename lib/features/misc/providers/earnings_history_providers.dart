@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:muevex_conductor/core/services/notification_service.dart';
+import 'package:muevex_conductor/core/models/invoice_model.dart';
 import 'package:muevex_conductor/core/supabase/supabase_client.dart' as db;
 import 'package:muevex_conductor/data/models/app_notification_model.dart';
 import 'package:muevex_conductor/data/models/rating_model.dart';
@@ -33,7 +37,11 @@ class EarningsNotifier extends AsyncNotifier<EarningsSummary> {
     final driverId = ref.watch(currentUserIdProvider);
     if (driverId == null) {
       return const EarningsSummary(
-        today: 0, week: 0, month: 0, total: 0, completedCount: 0,
+        today: 0,
+        week: 0,
+        month: 0,
+        total: 0,
+        completedCount: 0,
       );
     }
     final services = await ref
@@ -52,7 +60,11 @@ class EarningsNotifier extends AsyncNotifier<EarningsSummary> {
     final driverId = ref.read(currentUserIdProvider);
     if (driverId == null) {
       state = const AsyncValue.data(EarningsSummary(
-        today: 0, week: 0, month: 0, total: 0, completedCount: 0,
+        today: 0,
+        week: 0,
+        month: 0,
+        total: 0,
+        completedCount: 0,
       ));
       return;
     }
@@ -91,7 +103,8 @@ class EarningsNotifier extends AsyncNotifier<EarningsSummary> {
 }
 
 final earningsProvider =
-    AsyncNotifierProvider<EarningsNotifier, EarningsSummary>(EarningsNotifier.new);
+    AsyncNotifierProvider<EarningsNotifier, EarningsSummary>(
+        EarningsNotifier.new);
 
 class HistoryNotifier extends AsyncNotifier<List<Service>> {
   @override
@@ -117,6 +130,21 @@ class HistoryNotifier extends AsyncNotifier<List<Service>> {
 final historyProvider =
     AsyncNotifierProvider<HistoryNotifier, List<Service>>(HistoryNotifier.new);
 
+/// Facturas emitidas del conductor actual, indexadas por `service_id`.
+///
+/// Se carga una sola vez para el historial entero: consultar las facturas desde
+/// cada fila sería una petición por servicio.
+///
+/// Solo se guardan las **emitidas**: una minifactura en borrador todavía no se
+/// puede enseñar, así que no debe aparecer un botón que no lleva a ninguna
+/// parte. Publicar la minifactura es justo el paso que la pasa a `emitida`.
+final driverInvoicesByServiceProvider =
+    FutureProvider<Map<String, Invoice>>((ref) async {
+  if (ref.watch(currentUserIdProvider) == null) return <String, Invoice>{};
+  final invoices = await db.getDriverInvoices(status: InvoiceStatus.emitida);
+  return {for (final inv in invoices) inv.serviceId: inv};
+});
+
 class RatingsNotifier extends AsyncNotifier<List<Rating>> {
   @override
   Future<List<Rating>> build() async {
@@ -129,7 +157,8 @@ class RatingsNotifier extends AsyncNotifier<List<Rating>> {
 final ratingsProvider =
     AsyncNotifierProvider<RatingsNotifier, List<Rating>>(RatingsNotifier.new);
 
-final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
+final notificationsRepositoryProvider =
+    Provider<NotificationsRepository>((ref) {
   return NotificationsRepository();
 });
 
@@ -152,7 +181,28 @@ class NotificationsNotifier extends AsyncNotifier<List<AppNotification>> {
             column: 'user_id',
             value: userId,
           ),
-          callback: (_) => refresh(),
+          callback: (payload) {
+            // 1) Notificación local con sonido (evento nuevo para el conductor).
+            final row = payload.newRecord;
+            if (row.isNotEmpty) {
+              try {
+                final n = AppNotification.fromMap(row);
+                unawaited(
+                  notificationService.showOrderEventNotification(
+                    type: n.type,
+                    userRole: 'driver',
+                    data: n.data,
+                    title: n.title,
+                    body: n.message,
+                  ),
+                );
+              } catch (e) {
+                debugPrint('MUEVEX-C: no se pudo parsear la notificación: $e');
+              }
+            }
+            // 2) Refresca la bandeja y el badge de no leídas.
+            unawaited(refresh());
+          },
         )
         .subscribe();
 
@@ -199,4 +249,25 @@ final unreadNotificationsCountProvider = Provider<int>((ref) {
   final list = ref.watch(notificationsProvider).valueOrNull;
   if (list == null) return 0;
   return list.where((n) => !n.read).length;
+});
+
+/// Mantiene viva la suscripción de Realtime de notificaciones desde la raíz.
+///
+/// [NotificationsNotifier] es quien crea el canal y dispara el sonido, pero un
+/// `AsyncNotifier` solo existe mientras alguien lo mira. Antes el único que lo
+/// miraba era `DashboardShell` (a través de [unreadNotificationsCountProvider]),
+/// y como las pantallas de servicio activo se abren con
+/// `goRouter.go('/service/...')` y `goRouter.go('/navigation/...')` —que
+/// **reemplazan** la pila en vez de apilar—, el shell se destruía y con él el
+/// canal. Resultado: durante un servicio activo, que es justo cuando más falta
+/// hace el aviso, dejaban de llegar notificaciones y **no sonaba nada**.
+///
+/// Por eso este provider se mira en [MuevexConductorApp]: sobrevive a la
+/// navegación. No se muestra nada aquí a propósito; el valor se descarta.
+///
+/// Ojo: aquí **no** se llama a `showOrderEventNotification`. El sonido lo pone
+/// exclusivamente [NotificationsNotifier]. Si se añadiese también esta llamada,
+/// cada aviso sonaría dos veces.
+final notificationsSubscriptionProvider = Provider<void>((ref) {
+  ref.watch(unreadNotificationsCountProvider);
 });

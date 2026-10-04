@@ -72,7 +72,7 @@ class RedirectPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final user = await supabaseAuthUser();
+      final user = await getCurrentUser();
       final home = user != null && user.role == UserRole.driver;
       context.go(home ? '/home' : '/login');
     });
